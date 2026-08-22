@@ -36,8 +36,8 @@
     top:0; left:0;
     opacity:0;
   }
-  .girl.talking img.mouth-closed{ animation:blink-mouth 0.55s steps(1) infinite; }
-  .girl.talking img.mouth-open{ animation:blink-mouth-open 0.55s steps(1) infinite; }
+  .girl.talking img.mouth-closed{ animation:blink-mouth 0.60s steps(1) infinite; }
+  .girl.talking img.mouth-open{ animation:blink-mouth-open 0.60s steps(1) infinite; }
   @keyframes blink-mouth{
     0%,49%{opacity:1;} 50%,100%{opacity:0;}
   }
@@ -46,7 +46,7 @@
   }
   .caption-bubble{
     position:absolute;
-    top:180px;
+    top:240px;
     left:50%;
     transform:translateX(-50%);
     background:rgba(255,255,255,.94);
@@ -153,9 +153,9 @@
     { text: 'Alif', audio: 'alif.m4a', dur: 1600, pause: 500 },
     { text: 'Baa',  audio: 'baa.m4a',  dur: 1600, pause: 500 }
   ];
-
+  const leadIn = 1000;
   // precompute the start time (offset) of each line within the whole timeline
-  let _offset = 0;
+  let _offset = leadIn;
   const timeline = script.map(line => {
     const start = _offset;
     _offset += line.dur + (line.pause || 0);
