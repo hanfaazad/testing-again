@@ -149,10 +149,10 @@
   // 3. SCRIPT — add/edit lines here. "audio" is the file to play, "dur" is
   // that file's length in milliseconds (so animation/captions match it).
   const script = [
-    { text: 'Alif', audio: 'alif.m4a', dur: 1600 },
-    { text: 'Baa',  audio: 'baa.m4a',  dur: 1600 }
+    { text: 'Alif', audio: 'alif.m4a', dur: 1600, pause: 500},
+    { text: 'Baa',  audio: 'baa.m4a',  dur: 1600, pause: 500}
   ];
-  const totalDur = script.reduce((a,s)=>a+s.dur, 0) + 400;
+  const totalDur = script.reduce((a,s)=>a+s.dur+(s.pause||0), 0) + 400;
 
   let playing = false;
   let startTime = 0;
@@ -206,8 +206,14 @@
         setCaption(line.text);
         playSound(line.audio);
       }, offset);
-      offset += line.dur;
-    });
+    setTimeout(() => {
+        if(!playing) return;
+        girl.classList.remove('talking');
+        setCaption('');
+      }, offset + line.dur);
+    
+      offset += line.dur + (line.pause || 0);
+});
     setTimeout(() => { if(playing) stopAll(); }, totalDur);
   }
 
