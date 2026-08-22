@@ -158,6 +158,7 @@
   let startTime = 0;
   let rafId = null;
   let currentAudio = null;
+  let timeouts = [];
 
   function playSound(file){
     currentAudio = new Audio(file);
@@ -175,7 +176,9 @@
     playBtn.innerHTML = '&#9658;';
     caption.classList.remove('show');
     if(rafId) cancelAnimationFrame(rafId);
-    if(currentAudio){ currentAudio.pause(); currentAudio.currentTime = 0; }
+    if(currentAudio){ currentAudio.pause(); currentAudio.currentTime = 0;}
+    timeouts.forEach(id => clearTimeout(id));
+    timeouts = [];
   }
 
   function tick(){
@@ -201,20 +204,25 @@
 
     let offset = 0;
     script.forEach(line => {
-      setTimeout(() => {
+      const id1 = setTimeout(() => {
         if(!playing) return;
+        girl.classList.add('talking');
         setCaption(line.text);
         playSound(line.audio);
       }, offset);
-    setTimeout(() => {
+      timeouts.push(id1);
+    
+      const id2 = setTimeout(() => {
         if(!playing) return;
         girl.classList.remove('talking');
         setCaption('');
       }, offset + line.dur);
+      timeouts.push(id2);
     
       offset += line.dur + (line.pause || 0);
-});
-    setTimeout(() => { if(playing) stopAll(); }, totalDur);
+    });
+    const id3 = setTimeout(() => { if(playing) stopAll(); }, totalDur);
+    timeouts.push(id3);
   }
 
   playBtn.addEventListener('click', () => {
