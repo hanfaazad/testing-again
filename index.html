@@ -46,7 +46,7 @@
   }
   .caption-bubble{
     position:absolute;
-    top:18px;
+    top:120px;
     left:50%;
     transform:translateX(-50%);
     background:rgba(255,255,255,.94);
@@ -148,21 +148,31 @@
 
   // 3. SCRIPT — add/edit lines here. "audio" is the file to play, "dur" is
   // that file's length in milliseconds (so animation/captions match it).
+  // "pause" is the silent gap after this word before the next one starts.
   const script = [
-    { text: 'Alif', audio: 'alif.m4a', dur: 1600, pause: 500},
-    { text: 'Baa',  audio: 'baa.m4a',  dur: 1600, pause: 500}
+    { text: 'Alif', audio: 'alif.m4a', dur: 1600, pause: 500 },
+    { text: 'Baa',  audio: 'baa.m4a',  dur: 1600, pause: 500 }
   ];
-  const totalDur = script.reduce((a,s)=>a+s.dur+(s.pause||0), 0) + 400;
+
+  // precompute the start time (offset) of each line within the whole timeline
+  let _offset = 0;
+  const timeline = script.map(line => {
+    const start = _offset;
+    _offset += line.dur + (line.pause || 0);
+    return { ...line, start };
+  });
+  const totalDur = _offset;
 
   let playing = false;
-  let startTime = 0;
+  let elapsed = 0;            // how far into the whole timeline we are (ms)
+  let segmentStartClock = 0;  // Date.now() when current run began
   let rafId = null;
-  let currentAudio = null;
   let timeouts = [];
+  let currentAudio = null;
 
-  function playSound(file){
-    currentAudio = new Audio(file);
-    currentAudio.play();
+  function clearTimeouts(){
+    timeouts.forEach(id => clearTimeout(id));
+    timeouts = [];
   }
 
   function setCaption(text){
@@ -170,64 +180,101 @@
     caption.classList.toggle('show', !!text && ccOn);
   }
 
-  function stopAll(){
+  function playSound(file, offsetSec){
+    if(!file) return;
+    currentAudio = new Audio(file);
+    currentAudio.currentTime = offsetSec || 0;
+    currentAudio.play();
+  }
+
+  function pauseAll(){
     playing = false;
-    girl.classList.remove('talking');
     playBtn.innerHTML = '&#9658;';
-    caption.classList.remove('show');
+    girl.classList.remove('talking');
     if(rafId) cancelAnimationFrame(rafId);
-    if(currentAudio){ currentAudio.pause(); currentAudio.currentTime = 0;}
-    timeouts.forEach(id => clearTimeout(id));
-    timeouts = [];
+    clearTimeouts();
+    if(currentAudio){ currentAudio.pause(); } // keeps position, doesn't reset
+    elapsed = elapsed + (Date.now() - segmentStartClock);
+  }
+
+  function resetAll(){
+    pauseAll();
+    elapsed = 0;
+    progressFill.style.width = '0%';
+    setCaption('');
+    if(currentAudio){ currentAudio.currentTime = 0; }
   }
 
   function tick(){
     if(!playing) return;
-    const elapsed = Date.now() - startTime;
-    const pct = Math.min(100, (elapsed/totalDur)*100);
+    const now = elapsed + (Date.now() - segmentStartClock);
+    const pct = Math.min(100, (now/totalDur)*100);
     progressFill.style.width = pct + '%';
-    if(elapsed >= totalDur){
-      stopAll();
-      progressFill.style.width = '0%';
+    if(now >= totalDur){
+      resetAll();
       return;
     }
     rafId = requestAnimationFrame(tick);
   }
 
-  function playLesson(){
-    if(playing) return;
-    playing = true;
-    playBtn.innerHTML = '&#10074;&#10074;';
-    girl.classList.add('talking');
-    startTime = Date.now();
-    tick();
+  function scheduleFrom(startMs){
+    for(const line of timeline){
+      const lineEnd = line.start + line.dur;
+      const lineEndWithPause = line.start + line.dur + (line.pause || 0);
 
-    let offset = 0;
-    script.forEach(line => {
-      const id1 = setTimeout(() => {
-        if(!playing) return;
+      if(startMs < line.start){
+        // this whole line is still ahead — schedule it fully
+        const delayToStart = line.start - startMs;
+        const delayToEnd = lineEnd - startMs;
+        timeouts.push(setTimeout(() => {
+          if(!playing) return;
+          girl.classList.add('talking');
+          setCaption(line.text);
+          playSound(line.audio, 0);
+        }, delayToStart));
+        timeouts.push(setTimeout(() => {
+          if(!playing) return;
+          girl.classList.remove('talking');
+          setCaption('');
+        }, delayToEnd));
+      }
+      else if(startMs >= line.start && startMs < lineEnd){
+        // resumed in the MIDDLE of this line's talking part
+        const audioOffsetSec = (startMs - line.start) / 1000;
         girl.classList.add('talking');
         setCaption(line.text);
-        playSound(line.audio);
-      }, offset);
-      timeouts.push(id1);
-    
-      const id2 = setTimeout(() => {
-        if(!playing) return;
+        playSound(line.audio, audioOffsetSec);
+        const delayToEnd = lineEnd - startMs;
+        timeouts.push(setTimeout(() => {
+          if(!playing) return;
+          girl.classList.remove('talking');
+          setCaption('');
+        }, delayToEnd));
+      }
+      else if(startMs >= lineEnd && startMs < lineEndWithPause){
+        // resumed during this line's silent pause — mouth stays closed
         girl.classList.remove('talking');
         setCaption('');
-      }, offset + line.dur);
-      timeouts.push(id2);
-    
-      offset += line.dur + (line.pause || 0);
-    });
-    const id3 = setTimeout(() => { if(playing) stopAll(); }, totalDur);
-    timeouts.push(id3);
+      }
+      // else: this line is fully in the past, skip it
+    }
+  }
+
+  function playFrom(startMs){
+    playing = true;
+    playBtn.innerHTML = '&#10074;&#10074;';
+    segmentStartClock = Date.now();
+    scheduleFrom(startMs);
+    tick();
   }
 
   playBtn.addEventListener('click', () => {
-    if(playing){ stopAll(); progressFill.style.width='0%'; }
-    else { playLesson(); }
+    if(playing){
+      pauseAll();
+    } else {
+      if(elapsed >= totalDur){ elapsed = 0; } // finished before, restart clean
+      playFrom(elapsed);
+    }
   });
 })();
 </script>
